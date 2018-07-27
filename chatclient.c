@@ -5,127 +5,152 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-//This program heavily references Beej's guide and I will point out when/where
 
-struct addrinfo* createAddress(char* address, char* port){             //This function ia used to create the address information
-    struct addrinfo hints;
-    struct addrinfo *res;
+// Taken mostly from Beejs guide to socket programming
+struct addrinfo* getServerAddress(char* address, char* port){   //This function ia used to create the address information
+    struct addrinfo myAddress;
+    struct addrinfo *server;
     int status;
 
-    memset(&hints, 0, sizeof hints);        //Taken right from Beej's guide, empty the struct
-    hints.ai_family = AF_INET;                  //Used to specify version
-    hints.ai_socktype = SOCK_STREAM;    //TCP stream sockets
+    // Beej's guide for creating addrinfo struct
+    memset(&myAddress, 0, sizeof myAddress);
+    myAddress.ai_family = AF_INET;
+    myAddress.ai_socktype = SOCK_STREAM;
+    myAddress.ai_flags = AI_PASSIVE;
 
-    if((status = getaddrinfo(address, port, &hints, &res)) != 0){   //Also from Beej's guide. Print error if status isn't 0
+    if((status = getaddrinfo(address, port, &myAddress, &server)) != 0){
+        char* netdb_error;
         fprintf(stderr,
-                "Error. Please enter the correct port.\n",
+                "Error. Please enter the correct port. %s\n",
                 gai_strerror(status));
         exit(1);
     }
-
-    return res;
+    return server;
 }
 
+// Create a socket with the address fields provided in the command args
+int createSocket(struct addrinfo* server){
+    int sockfd;
 
-int createSocket(struct addrinfo* res){           //The next step in Beej's guide after creating the address info. We want to feed that into the socket
-    int sockfd;                                                 //It's either going to return a socket descriptor to be used later or it will return -1 and exit with a error
-
-    if ((sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1){
+    // create socket from address or error out
+    if ((sockfd = socket(server->ai_family, server->ai_socktype, server->ai_protocol)) == -1){
         fprintf(stderr, "Error. Socket was not created.\n");
         exit(1);
     }
     return sockfd;
 }
 
-
-void connectSocket(int sockfd, struct addrinfo * res){     //What we will use for the conneciton itself. Very similar to the creation
+// Error check the connection of the socket created
+void connectSocket(int socket_fd, struct addrinfo * server){
     int status;
-    if ((status = connect(sockfd, res->ai_addr, res->ai_addrlen)) == -1){
+    if ((status = connect(socket_fd, server->ai_addr, server->ai_addrlen)) == -1){
         fprintf(stderr, "Error in connection.\n");
         exit(1);
     }
 }
 
-
-void chat(int sockfd, char * username, char * servername){  //This is what we'll call to be able to actually chat
-    int bytes = 0;      //We'll use these to keep track of errors
-    int status;
-
-    char inputChars[500];                   //We need some character buffers to hold the input and output. We also need to make sure they're clear
-    memset(inputChars, 0 ,sizeof(inputChars));
-
-    char outputChars[500];
-    memset(outputChars, 0, sizeof(outputChars));
-
-
-    fgets(inputChars, 500, stdin);       //Make sure to clear stdin
-
-    while(1){
-        printf("%s> ", username);   //Per assignment specs, this is the prompt that will be displayed for typing messages
-        fgets(inputChars, 500, stdin);
-
-        if (strcmp(inputChars, "\\quit\n") == 0){    //Also must be able to type \quit and the application closes
-            break;
-        }
-
-        bytes = send(sockfd, inputChars, strlen(inputChars), 0);  //See the number of bytes to make sure everything was sent properly. Use send per Beej's guide
-
-        if(bytes == -1){
-            fprintf(stderr, "Error. Data not sent properly.\n");
-            exit(1);
-        }
-
-        status = recv(sockfd, outputChars, 500, 0);      //Make sure there were no errors when receiving (Beej's guide as well)
-
-        if (status == -1){
-            fprintf(stderr, "Error. Data not received properly\n");
-            exit(1);
-        }
-
-        else if (status == 0){                              //Server ended the program
-            printf("Program ended by server.\n");
-            break;
-        }
-        else{                                                       //Everything was okay. Now, print the message
-            printf("%s> %s\n", servername, outputChars);
-        }
-
-        memset(inputChars, 0, sizeof(inputChars));      //Remember to clear out the char buffer for the next run
-        memset(outputChars, 0, sizeof(outputChars));
+// this function acts as a handshake between the client and server
+void establishTCP(int socket_fd, char* clientName, char* serveName){
+    int numbytes;
+    if ((numbytes =  send(socket_fd, clientName, strlen(clientName), 0)) == -1) {
+        perror("send");
+        exit(1);
+    }
+    if ((numbytes = recv(socket_fd, serveName, 10, 0)) == -1) {
+        perror("recv");
+        exit(1);
     }
 
-    close(sockfd);                                  //We can't forget to close the connection
+
+}
+
+void beginChat(int sockfd, char * username, char * servername) {  //This is what we'll call to be able to actually chat
+    // status of message sent
+    int bytes = 0;
+    // status of message received
+    int status;
+
+    char message[500];
+    memset(message, 0 ,sizeof(message));
+
+    char received[500];
+    memset(received, 0, sizeof(received));
+
+    // flush out the console standard in
+    fgets(message, 500, stdin);
+
+    while(1){
+        // print out client handle and get message from keyboard input
+        printf("%s> ", username);
+        fgets(message, 500, stdin);
+
+        // check for termination statement
+        if (strcmp(message, "\\quit\n") == 0){
+            break;
+        }
+
+        // error check for send
+        bytes = send(sockfd, message, strlen(message), 0);
+
+        if(bytes == -1){
+            perror("send");
+            exit(1);
+        }
+
+        server_message = recv(sockfd, received, 500, 0);
+
+        // handle all cases for send()
+        if (server_message == -1){
+            perror("recv");
+            exit(1);
+        }
+        else if (server_message == 0){
+            printf("Server ended the connection.\n");
+            break;
+        }
+        else{
+            // message was received, so print
+            printf("%s> %s\n", servername, received);
+        }
+
+        // clear out the buffers
+        memset(message, 0, sizeof(message));
+        memset(received, 0, sizeof(received));
+    }
+
+    // close the socket
+    close(sockfd);
     printf("Connection is now closed.\n");
 }
 
 
-void infoSave(int sockfd, char* userName, char* serveName){	        //A helper function that saves the descriptors of the user and server
-    int sendingcode = send(sockfd, userName, strlen(userName), 0);
-    int receivingcode = recv(sockfd, serveName, 10, 0);
-}
-
-
-int main(int argc, char *argv[]){                     //Finally, where we'll call all of our functions to enable chatting          
-    char userName[10];       //Store the user name
-    char serveName[10];    //Store the server name
-    if(argc != 3){                                                      //If user does not enter three arguments, error out and give them the usage statement
+int main(int argc, char *argv[]){
+    char clientName[10];
+    char serveName[10];
+    // check command line args
+    if(argc != 3){
         fprintf(stderr, "Usage: ./chatClient [server] [port]\n");
         exit(1);
     }
 
+    // prompt for user handle
     printf("Enter a username that is 10 characters or less.");
-    scanf("%s", userName);
+    scanf("%s", clientName);
 
-    struct addrinfo* res = createAddress(argv[1], argv[2]);   //Create the new addrinfo struct and pass the proper arguments from the command line
+    // call address creation function
+    struct addrinfo* server = getServerAddress(argv[1], argv[2]);
 
-    int sockfd = createSocket(res);        //Create a new socket and pass the proper struct
+    // Create a socket with the address fields provided in the command args
+    int socket_fd = createSocket(server);
 
-    connectSocket(sockfd, res);        //Connect that socket
+    // Create a socket connection if creation was successful
+    connectSocket(socket_fd, server);
 
+    // make a "handshake"
+    establishTCP(socket_fd, clientName, serveName);
 
-    infoSave(sockfd, userName, serveName);  //Save info to use
+    // begin the chatting loop function
+    beginChat(socket_fd, clientName, serveName);
 
-    chat(sockfd, userName, serveName);      //Actually call the chat function using all the information
-
-    freeaddrinfo(res);          //Beej's guide. Finished with struct
+    freeaddrinfo(server);
 }
