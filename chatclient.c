@@ -5,9 +5,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-
-// Taken mostly from Beejs guide to socket programming
-struct addrinfo* getServerAddress(char* address, char* port){   //This function ia used to create the address information
+//This function ia used to create the address information
+struct addrinfo* getServerAddress(char* address, char* port){
     struct addrinfo myAddress;
     struct addrinfo *server;
     int status;
@@ -19,7 +18,6 @@ struct addrinfo* getServerAddress(char* address, char* port){   //This function 
     myAddress.ai_flags = AI_PASSIVE;
 
     if((status = getaddrinfo(address, port, &myAddress, &server)) != 0){
-        char* netdb_error;
         fprintf(stderr,
                 "Error. Please enter the correct port. %s\n",
                 gai_strerror(status));
@@ -60,15 +58,13 @@ void establishTCP(int socket_fd, char* clientName, char* serveName){
         perror("recv");
         exit(1);
     }
-
-
 }
 
 void beginChat(int sockfd, char * username, char * servername) {  //This is what we'll call to be able to actually chat
     // status of message sent
     int bytes = 0;
     // status of message received
-    int status;
+    int server_message;
 
     char message[500];
     memset(message, 0 ,sizeof(message));
@@ -134,11 +130,15 @@ int main(int argc, char *argv[]){
     }
 
     // prompt for user handle
-    printf("Enter a username that is 10 characters or less.");
+    printf("Enter a username that is 10 characters or less.\n");
     scanf("%s", clientName);
 
+    // get command line arguments
+    char* address = argv[1];
+    char* port = argv[2];
+
     // call address creation function
-    struct addrinfo* server = getServerAddress(argv[1], argv[2]);
+    struct addrinfo* server = getServerAddress(address, port);
 
     // Create a socket with the address fields provided in the command args
     int socket_fd = createSocket(server);
