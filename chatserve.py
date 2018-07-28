@@ -1,27 +1,47 @@
 import sys
 from socket import *
+from struct import *
+MESSAGE_SIZE = 500
 
+
+def getMessageLength(sock):
+	header = sock.recv(4)
+	# unpack from network byte order
+	message_size = unpack('!I', header)[0]
+	return int(message_size)
+
+# take from https://stackoverflow.com/questions/17667903/python-socket-receive-large-amount-of-data
+def recvall(sock, n):
+	# Helper function to recv n bytes or return None if EOF is hit
+	data = b''
+	while len(data) < n:
+		packet = sock.recv(n - len(data))
+		if not packet:
+			return None
+		data += packet
+	return data
 
 # main chat function that loops sending and receiving
 def beginChat(conn, client, handle):
-	message = ""
 	while 1:
-		# we want to receive up to 500 chars
-		receive = conn.recv(501)[0:-1]
+
+		length = getMessageLength(conn)
+		receive = recvall(conn, length)
 		if receive == "":
 			print "End of connection"
 			print "Waiting..."
 			break
 		# print client message with appended handle
-		print client + "> " + receive
+		print client + "> " + receive[0:-1]
 		sending = ""
-		while len(sending) > 500 or len(sending) == 0:
+		while len(sending) > MESSAGE_SIZE or len(sending) == 0:
 			sending = raw_input("{}> ".format(handle))
 
 		# check for stopping condition
 		if sending == "\quit":
 			print "Connection ended.\nWaiting...\n"
 			break
+
 		conn.send(sending)
 
 def createSocket(port):
@@ -34,7 +54,7 @@ def createSocket(port):
 #  and does a simple send and recv to send the client our user name
 #  and get the client's user name back
 def establishTCP(conn, handle):
-	clientHandle = conn.recv(500)
+	clientHandle = conn.recv(MESSAGE_SIZE)
 	conn.sendall(handle)
 	return clientHandle
 

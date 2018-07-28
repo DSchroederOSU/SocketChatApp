@@ -5,6 +5,16 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+// allow for string term character
+// we are also putting the length as a 4 byte int
+#define MESSAGE_SIZE 505
+
+struct msgstruct {
+    uint32_t length;
+    char send_data[500];
+};
+
+
 //This function ia used to create the address information
 struct addrinfo* getServerAddress(char* address, char* port){
     struct addrinfo myAddress;
@@ -65,35 +75,40 @@ void beginChat(int sockfd, char * username, char * servername) {  //This is what
     int bytes = 0;
     // status of message received
     int server_message;
-
-    char message[500];
+    char message[MESSAGE_SIZE+4];
     memset(message, 0 ,sizeof(message));
-
-    char received[500];
+    char input_string[MESSAGE_SIZE+1];
+    memset(input_string, 0 ,sizeof(input_string));
+    char received[MESSAGE_SIZE];
     memset(received, 0, sizeof(received));
 
     // flush out the console standard in
-    fgets(message, 500, stdin);
+    fgets(message, MESSAGE_SIZE, stdin);
 
     while(1){
         // print out client handle and get message from keyboard input
         printf("%s> ", username);
-        fgets(message, 500, stdin);
+        fgets(input_string, MESSAGE_SIZE, stdin);
 
         // check for termination statement
-        if (strcmp(message, "\\quit\n") == 0){
+        if (strcmp(input_string, "\\quit\n") == 0){
             break;
         }
 
-        // error check for send
-        bytes = send(sockfd, message, strlen(message), 0);
+        int32_t conv = htonl((int) strlen(input_string));
+        char *data = (char*)&conv;
+        int to_send = sizeof(conv);
+
+        // send the header first with the amount of bytes to read
+        bytes = send(sockfd, data, to_send, 0);
+        bytes = send(sockfd, input_string, strlen(input_string), 0);
 
         if(bytes == -1){
             perror("send");
             exit(1);
         }
 
-        server_message = recv(sockfd, received, 500, 0);
+        int server_message = recv(sockfd, received, MESSAGE_SIZE, 0);
 
         // handle all cases for send()
         if (server_message == -1){
@@ -130,7 +145,7 @@ int main(int argc, char *argv[]){
     }
 
     // prompt for user handle
-    printf("Enter a username that is 10 characters or less.\n");
+    printf("Enter a handle (0-10 Chars):\n");
     scanf("%s", clientName);
 
     // get command line arguments
